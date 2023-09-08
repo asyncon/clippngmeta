@@ -3,6 +3,7 @@ name = "clippngmeta"
 version = "0.1.0"
 edition = "2021"
 description = "Copy png image metadata to clipboard"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
