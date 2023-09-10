@@ -11,49 +11,37 @@ struct Args {
     path: String,
 }
 
-macro_rules! unexpected {
-    ($m:expr, $name:ident, $ok:expr) => {
-        match $m {
-            Ok($name) => $ok,
-            Err(e) => panic!("unexpected error: {}", e),
-        }
-    };
-}
-
-macro_rules! mapadd {
-    ($map:ident, $text_chunk:ident, $text:expr) => {
-        $map.insert(serde_yaml::Value::String($text_chunk.keyword.clone()), parse($text))
-    };
-}
-
 fn main() {
+    match run() {
+        None => return,
+        Some(e) => panic!("unexpected error: {:?}", e),
+    }
+}
+
+fn run() -> Option<(std::io::Error, serde_yaml::Error, png::DecodingError, arboard::Error)> {
     let args = Args::parse();
 
-    let reader = unexpected!(File::open(args.path), file, unexpected!(
-        Decoder::new(file).read_info(), reader, reader
-    ));
+    let reader = Decoder::new(File::open(args.path).ok()?).read_info().ok()?;
 
     let mut map = serde_yaml::Mapping::new();
 
     let info = &reader.info();
 
     for text_chunk in &info.uncompressed_latin1_text {
-        mapadd!(map, text_chunk, text_chunk.text.clone());
+        map.insert(serde_yaml::Value::String(text_chunk.keyword.clone()), parse(text_chunk.text.clone()));
     }
 
     for text_chunk in &info.compressed_latin1_text {
-        unexpected!(text_chunk.get_text(), text, mapadd!(map, text_chunk, text));
+        map.insert(serde_yaml::Value::String(text_chunk.keyword.clone()), parse(text_chunk.get_text().ok()?));
     }
 
     for text_chunk in &info.utf8_text {
-        unexpected!(text_chunk.get_text(), text, mapadd!(map, text_chunk, text));
+        map.insert(serde_yaml::Value::String(text_chunk.keyword.clone()), parse(text_chunk.get_text().ok()?));
     }
 
-    let the_string = unexpected!(serde_yaml::to_string(&map), s, s);
+    Clipboard::new().ok()?.set_text(serde_yaml::to_string(&map).ok()?).ok()?;
 
-    let mut clipboard = unexpected!(Clipboard::new(), c, c);
-
-    unexpected!(clipboard.set_text(the_string), _s, return)
+    return None
 }
 
 fn parse(text: String) -> serde_yaml::Value {
