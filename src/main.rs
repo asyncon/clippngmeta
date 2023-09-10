@@ -11,56 +11,49 @@ struct Args {
     path: String,
 }
 
+macro_rules! unexpected {
+    ($m:expr, $name:ident, $ok:expr) => {
+        match $m {
+            Ok($name) => $ok,
+            Err(e) => panic!("unexpected error: {}", e),
+        }
+    };
+}
+
+macro_rules! mapadd {
+    ($map:ident, $text_chunk:ident, $text:expr) => {
+        $map.insert(serde_yaml::Value::String($text_chunk.keyword.clone()), parse($text))
+    };
+}
+
 fn main() {
     let args = Args::parse();
 
-    let reader = match File::open(args.path) {
-        Ok(file) => match Decoder::new(file).read_info() {
-            Ok(reader) => reader,
-            Err(e) => panic!("unexpected error: {}", e),
-        },
-        Err(e) => panic!("unexpected error: {}", e),
-    };
+    let reader = unexpected!(File::open(args.path), file, unexpected!(
+        Decoder::new(file).read_info(), reader, reader
+    ));
 
     let mut map = serde_yaml::Mapping::new();
 
     let info = &reader.info();
 
     for text_chunk in &info.uncompressed_latin1_text {
-        map.insert(
-            serde_yaml::Value::String(text_chunk.keyword.clone()), 
-            parse(text_chunk.text.clone())
-        );
+        mapadd!(map, text_chunk, text_chunk.text.clone());
     }
 
     for text_chunk in &info.compressed_latin1_text {
-        match text_chunk.get_text() {
-            Ok(text) => map.insert(serde_yaml::Value::String(text_chunk.keyword.clone()), parse(text)),
-            Err(e) => panic!("unexpected error: {}", e),
-        };
+        unexpected!(text_chunk.get_text(), text, mapadd!(map, text_chunk, text));
     }
 
     for text_chunk in &info.utf8_text {
-        match text_chunk.get_text() {
-            Ok(text) => map.insert(serde_yaml::Value::String(text_chunk.keyword.clone()), parse(text)),
-            Err(e) => panic!("unexpected error: {}", e),
-        };
+        unexpected!(text_chunk.get_text(), text, mapadd!(map, text_chunk, text));
     }
 
-    let the_string = match serde_yaml::to_string(&map) {
-        Ok(s) => s,
-        Err(e) => panic!("unexpected error: {}", e),
-    };
+    let the_string = unexpected!(serde_yaml::to_string(&map), s, s);
 
-    let mut clipboard = match Clipboard::new() {
-        Ok(clipboard) => clipboard,
-        Err(e) => panic!("unexpected error: {}", e),
-    };
+    let mut clipboard = unexpected!(Clipboard::new(), c, c);
 
-    match clipboard.set_text(the_string) {
-        Ok(_) => return,
-        Err(e) => panic!("unexpected error: {}", e),
-    }
+    unexpected!(clipboard.set_text(the_string), _s, return)
 }
 
 fn parse(text: String) -> serde_yaml::Value {
